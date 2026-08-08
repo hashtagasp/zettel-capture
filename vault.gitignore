@@ -1,0 +1,18 @@
+# Copy this to 96_Obsidian_Structure/.gitignore before the first commit.
+#
+# workspace.json records which panes are open and changes on every focus
+# change. Tracking it means a merge conflict every time the desktop and the
+# phone are used on the same day, over information that carries no meaning.
+# The rest of .obsidian stays tracked, so plugin settings and the templates
+# folder follow the vault.
+
+.DS_Store
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.trash/
+
+# Plugin code is ~1.2 MB per bundle and is re-committed in full on every update.
+# Git never forgets a blob, and this repo also has to carry photos. The
+# manifests stay tracked, so it stays visible which plugins the vault expects.
+.obsidian/plugins/*/main.js
+.obsidian/plugins/*/styles.css
