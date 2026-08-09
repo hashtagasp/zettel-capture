@@ -10,7 +10,7 @@ import {
   putDraft,
   type Draft,
 } from '../lib/store'
-import { refreshFolder } from '../lib/sync'
+import { flush, refreshFolder } from '../lib/sync'
 import { applyTheme, loadTheme, type Theme } from '../lib/theme'
 import { useAsync, useOnline, useSyncPump } from '../lib/hooks'
 import { Deck } from './Deck'
@@ -50,6 +50,18 @@ export function App() {
 
   const refresh = useCallback(() => setNonce((n) => n + 1), [])
 
+  /**
+   * Saving must start the upload, not merely queue it. Without this the note
+   * waits for the next 60-second tick — which reads as the app being slow when
+   * it is in fact idle.
+   */
+  const saveAndSync = useCallback(() => {
+    refresh()
+    void flush()
+      .then(() => refresh())
+      .catch(() => undefined)
+  }, [refresh])
+
   useEffect(() => {
     void loadConfig().then((loaded) => {
       setConfig(loaded)
@@ -64,13 +76,13 @@ export function App() {
 
   const [drafts, , draftsLoading] = useAsync<Draft[]>(allDrafts, [nonce], [])
 
-  const [entriesByLane] = useAsync(
+  const [foldersByLane] = useAsync(
     async () => {
       const cached = await Promise.all(LANES.map((lane) => cachedFolder(lane.folder)))
-      return cached.map((c) => c?.entries ?? [])
+      return cached.map((c) => ({ entries: c?.entries ?? [], fetchedAt: c?.fetchedAt ?? 0 }))
     },
     [nonce],
-    LANES.map(() => []),
+    LANES.map(() => ({ entries: [], fetchedAt: 0 })),
   )
 
   const cardsByLane = useMemo(
@@ -79,10 +91,11 @@ export function App() {
         buildCards(
           lane,
           drafts.filter((d) => d.laneId === lane.id),
-          entriesByLane[index] ?? [],
+          foldersByLane[index]?.entries ?? [],
+          foldersByLane[index]?.fetchedAt ?? 0,
         ),
       ),
-    [drafts, entriesByLane],
+    [drafts, foldersByLane],
   )
 
   const unsynced = useMemo(() => drafts.filter((d) => d.syncState !== 'synced').length, [drafts])
@@ -287,7 +300,7 @@ export function App() {
           draftId={sheet.draftId}
           openCamera={sheet.camera}
           onClose={() => setSheet(null)}
-          onSaved={refresh}
+          onSaved={saveAndSync}
         />
       )}
 

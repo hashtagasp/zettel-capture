@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact'
-import { readFile } from '../lib/github'
+import { NetworkError, readFile } from '../lib/github'
 import type { GitHubConfig } from '../lib/github'
 import { describeFilename } from '../lib/cards'
 import { useAsync } from '../lib/hooks'
@@ -15,7 +15,30 @@ interface ReaderProps {
 export function Reader({ config, path, onAppendQuote, onClose }: ReaderProps) {
   const filename = path.split('/').pop() ?? path
   const { title } = describeFilename(filename)
-  const [content, , loading] = useAsync(() => readFile(config, path), [path], null)
+  /**
+   * "Couldn't load it" is three different problems with three different
+   * answers, and telling the user it's a connection issue when the file was
+   * deleted sends them looking in the wrong place.
+   */
+  const [result, , loading] = useAsync<
+    | { kind: 'ok'; text: string }
+    | { kind: 'missing' }
+    | { kind: 'offline' }
+    | { kind: 'error'; message: string }
+    | null
+  >(
+    async () => {
+      try {
+        const file = await readFile(config, path)
+        return file ? { kind: 'ok', text: file.text } : { kind: 'missing' }
+      } catch (err) {
+        if (err instanceof NetworkError) return { kind: 'offline' }
+        return { kind: 'error', message: err instanceof Error ? err.message : String(err) }
+      }
+    },
+    [path],
+    null,
+  )
 
   return (
     <div class="sheet">
@@ -37,13 +60,20 @@ export function Reader({ config, path, onAppendQuote, onClose }: ReaderProps) {
 
       <div class="sheet-body">
         {loading && <p class="note">Lädt …</p>}
-        {!loading && !content && (
+        {result?.kind === 'missing' && (
           <p class="note">
-            Nicht verfügbar. Ohne Verbindung lassen sich nur Notizen öffnen, die auf diesem Gerät
-            liegen.
+            Diese Notiz liegt nicht mehr im Repository. Sie wurde gelöscht oder umbenannt — die
+            Karte stammt noch aus einer älteren Ordnerliste und verschwindet beim nächsten
+            Aktualisieren.
           </p>
         )}
-        {content && <Markdown text={content.text} />}
+        {result?.kind === 'offline' && (
+          <p class="note">
+            Keine Verbindung. Ohne Netz lassen sich nur Notizen öffnen, die auf diesem Gerät liegen.
+          </p>
+        )}
+        {result?.kind === 'error' && <p class="note">{result.message}</p>}
+        {result?.kind === 'ok' && <Markdown text={result.text} />}
       </div>
     </div>
   )

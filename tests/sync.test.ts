@@ -146,6 +146,30 @@ async function main() {
     eq('draft is marked synced', saved?.syncState, 'synced')
     eq('attempt counter reset', saved?.attempts, 0)
     check('remote path recorded', saved?.remotePath?.startsWith('00_Eingang/') ?? false)
+
+    // Latency is round trips. A plain note should cost a listing and a write —
+    // nothing else. An extra probe here is a second of thumb-twiddling on a
+    // phone connection.
+    eq('a text note costs exactly 2 requests', calls.length, 2)
+    eq('  1st is the folder listing', `${calls[0].method} ${calls[0].url.includes('00_Eingang')}`, 'GET true')
+    eq('  2nd is the write', calls[1].method, 'PUT')
+  }
+
+  /* --- the collision probe still runs when a name is actually taken ---- */
+  {
+    reset()
+    remote = new Map([['00_Eingang/E 2026-08-08 Belegt.md', 'schon da']])
+    const d = draft({ body: 'Belegt.' })
+    await putDraft(d)
+    await flush()
+
+    check(
+      'a taken name is verified against the branch before writing',
+      calls.some((c) => c.method === 'GET' && decodeURIComponent(c.url).includes('Belegt 2.md')),
+      calls.map((c) => `${c.method} ${decodeURIComponent(c.url).split('/contents/')[1] ?? ''}`).join(' | '),
+    )
+    check('original file untouched', remote.get('00_Eingang/E 2026-08-08 Belegt.md') === 'schon da')
+    check('new note written beside it', remote.has('00_Eingang/E 2026-08-08 Belegt 2.md'))
   }
 
   /* --- umlauts and an en-dash survive the whole round trip -------------- */

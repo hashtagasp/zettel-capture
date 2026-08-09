@@ -28,7 +28,9 @@ import {
   previewOf,
   spliceQuoteIntoQuelle,
 } from '../src/lib/notes'
-import { describeFilename } from '../src/lib/cards'
+import { buildCards, describeFilename } from '../src/lib/cards'
+import { LANES } from '../src/lib/lanes'
+import type { Draft } from '../src/lib/store'
 import { FILENAMES, QUELLE_WITHOUT_ZITATE, QUELLE_WITH_ZITATE, ZETTEL } from './fixtures'
 
 const VAULT = process.env.VAULT ?? '/Users/christianmiller/Desktop/Body/Lab/96_Obsidian_Structure'
@@ -294,6 +296,73 @@ for (const filename of vaultFiles('30_Quellen')) {
   check('preview starts at the prose', preview.startsWith('Gutes Design ist wie gute Kunst'))
   check('preview is truncated', preview.length <= 241)
   check('preview of an empty note is empty', previewOf('---\ntype: eingang\n---\n\n# Titel\n') === '')
+}
+
+/* ------------------------------------------------------------ card decks */
+
+{
+  const eingang = LANES[0]
+  const at = (ms: number) => new Date(2026, 7, 8, 12, 0, ms / 1000).getTime()
+
+  const synced = (over: Partial<Draft> = {}): Draft => ({
+    id: 'd1',
+    kind: 'eingang',
+    laneId: 'eingang',
+    title: 'Medium und Form',
+    body: 'Text.',
+    attachmentIds: [],
+    createdAt: at(0),
+    updatedAt: at(1000),
+    syncState: 'synced',
+    remotePath: '00_Eingang/E 2026-08-08 Medium und Form.md',
+    attempts: 0,
+    ...over,
+  })
+
+  const entry = {
+    name: 'E 2026-08-08 Medium und Form.md',
+    path: '00_Eingang/E 2026-08-08 Medium und Form.md',
+    sha: 'x',
+    size: 10,
+    type: 'file' as const,
+  }
+
+  eq(
+    'a synced note present in the listing appears once, not twice',
+    buildCards(eingang, [synced()], [entry], at(2000)).length,
+    1,
+  )
+  eq(
+    'a synced note not yet in a stale listing is still shown',
+    buildCards(eingang, [synced()], [], at(500)).length,
+    1,
+  )
+  // Regression: after the vault was cleared, cards for deleted notes lingered
+  // and opened to "Nicht verfügbar".
+  eq(
+    'a synced note absent from a newer listing disappears',
+    buildCards(eingang, [synced()], [], at(2000)).length,
+    0,
+  )
+  eq(
+    'an unsynced note is always shown, listing or not',
+    buildCards(eingang, [synced({ syncState: 'queued', remotePath: undefined })], [], at(2000)).length,
+    1,
+  )
+  eq(
+    'the title is what the card shows',
+    buildCards(eingang, [synced({ syncState: 'queued' })], [], 0)[0].title,
+    'Medium und Form',
+  )
+  eq(
+    'without a title the card falls back to the body',
+    buildCards(eingang, [synced({ syncState: 'queued', title: '' })], [], 0)[0].title,
+    'Text.',
+  )
+  check(
+    'a failed note is marked for full-contrast rendering',
+    buildCards(eingang, [synced({ syncState: 'error', lastError: 'kaputt' })], [], 0)[0].failed === true,
+  )
 }
 
 /* ----------------------------------------------------------------- report */

@@ -72,11 +72,15 @@ async function pushEingang(config: GitHubConfig, draft: Draft): Promise<string> 
   const base = eingangFilename(date, draft.body, draft.title)
   let filename = deduplicateName(base, taken)
 
-  // The listing can be seconds stale; confirm against the branch before writing
-  // so a same-minute capture from another device is never overwritten.
-  while (await exists(config, `00_Eingang/${filename}`)) {
-    taken.add(filename)
-    filename = deduplicateName(base, taken)
+  // The listing was fetched a moment ago, so in the common case — a name nobody
+  // else is using — trust it and skip a round trip. Creating a file without a
+  // sha is rejected by GitHub if the path exists, so a lost race still can't
+  // overwrite anything; it fails and retries with a fresh listing.
+  if (filename !== base) {
+    while (await exists(config, `00_Eingang/${filename}`)) {
+      taken.add(filename)
+      filename = deduplicateName(base, taken)
+    }
   }
 
   const markdown = buildEingangNote({

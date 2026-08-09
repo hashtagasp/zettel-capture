@@ -107,12 +107,27 @@ function entryCard(entry: RepoEntry): Card {
  * recent thing that happened; a draft already mirrored by a repo entry is
  * dropped so the same note never appears twice.
  */
-export function buildCards(lane: Lane, drafts: Draft[], entries: RepoEntry[]): Card[] {
+export function buildCards(
+  lane: Lane,
+  drafts: Draft[],
+  entries: RepoEntry[],
+  /** When the folder listing was fetched; 0 if it has never been fetched. */
+  fetchedAt = 0,
+): Card[] {
   const remotePaths = new Set(entries.map((e) => e.path))
 
-  const draftCards = drafts
-    .filter((d) => !(d.syncState === 'synced' && d.remotePath && remotePaths.has(d.remotePath)))
-    .map(draftCard)
+  /**
+   * A synced draft is only a placeholder, shown until the folder listing
+   * catches up with it. Once a listing newer than the sync exists and the file
+   * isn't in it, the note is genuinely gone from the repo — deleted on the
+   * desktop, say — and the card must go too, or it lingers forever and opens
+   * to "not available".
+   */
+  const settled = (d: Draft) =>
+    d.syncState === 'synced' &&
+    ((d.remotePath !== undefined && remotePaths.has(d.remotePath)) || fetchedAt > d.updatedAt)
+
+  const draftCards = drafts.filter((d) => !settled(d)).map(draftCard)
 
   const entryCards = entries
     .slice()
