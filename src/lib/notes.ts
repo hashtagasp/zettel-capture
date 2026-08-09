@@ -34,11 +34,14 @@ export const stampCompact = (d: Date): string =>
 export const dateLabelDe = (d: Date): string => `${d.getDate()}. ${MONTHS_DE[d.getMonth()]}`
 
 /**
- * `E 2026-08-08 Vorlesung Systemtheorie.md`. Falls back to a timestamped name
- * when the note has no usable first line, so a rushed capture never blocks.
+ * `E 2026-08-08 Vorlesung Systemtheorie.md`.
+ *
+ * The title wins when there is one. Without it the first line of the body is
+ * used, and failing that a timestamp — a rushed capture must never be blocked
+ * by the question of what to call it.
  */
-export function eingangFilename(date: Date, text: string): string {
-  const stichwort = sanitizeFilenamePart(text)
+export function eingangFilename(date: Date, body: string, title?: string): string {
+  const stichwort = sanitizeFilenamePart(title ?? '') || sanitizeFilenamePart(body)
   const base = stichwort || `Notiz ${pad(date.getHours())}${pad(date.getMinutes())}`
   return `E ${isoDate(date)} ${base}.md`
 }

@@ -21,8 +21,10 @@ export interface Card {
   draftId?: string
   /** Present for files that exist in the repo. */
   path?: string
-  /** Shown in accent under the preview when the draft hasn't landed yet. */
+  /** Shown under the preview when the draft hasn't landed yet. */
   flag?: string
+  /** Renders the flag at full contrast — colour can't carry this in a B/W UI. */
+  failed?: boolean
 }
 
 const MONTHS_DE = [
@@ -66,7 +68,10 @@ function draftCard(draft: Draft): Card {
   const { title, subtitle } =
     draft.kind === 'quelle-append'
       ? { title: draft.targetLabel ?? 'Zitat', subtitle: 'Zitat' }
-      : { title: previewOf(draft.body, 60) || 'Ohne Titel', subtitle: dateLabelDe(new Date(draft.createdAt)) }
+      : {
+          title: draft.title?.trim() || previewOf(draft.body, 60) || 'Ohne Titel',
+          subtitle: dateLabelDe(new Date(draft.createdAt)),
+        }
 
   const flag = (() => {
     switch (draft.syncState) {
@@ -88,6 +93,7 @@ function draftCard(draft: Draft): Card {
     preview: previewOf(draft.body),
     draftId: draft.id,
     flag,
+    failed: draft.syncState === 'error',
   }
 }
 

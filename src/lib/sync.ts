@@ -69,7 +69,7 @@ async function pushEingang(config: GitHubConfig, draft: Draft): Promise<string> 
 
   const existing = await listFolder(config, '00_Eingang')
   const taken = new Set(existing.map((e) => e.name))
-  const base = eingangFilename(date, draft.body)
+  const base = eingangFilename(date, draft.body, draft.title)
   let filename = deduplicateName(base, taken)
 
   // The listing can be seconds stale; confirm against the branch before writing

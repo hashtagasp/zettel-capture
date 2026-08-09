@@ -1,17 +1,19 @@
 /*
- * Rams: warm paper, near-black ink, hairlines, one accent that appears only
- * where an action or a warning lives. No gradients, no shadows beyond the
- * minimum needed to read one card as being in front of another.
+ * Black and white only — no hue anywhere. State is carried by shape and weight
+ * instead of colour: a filled dot is synced, a hollow ring is pending. Light is
+ * the default; dark is an explicit choice, stamped as data-theme on <html>.
  */
 
 :root {
-  --bg: #f5f4f1;
+  --bg: #f6f6f6;
   --card: #ffffff;
-  --ink: #1c1c1a;
-  --muted: #8a8a84;
-  --rule: #e3e2de;
-  --accent: #d8582b;
-  --sunken: #eceae5;
+  --ink: #111111;
+  --muted: #767676;
+  --rule: #e2e2e2;
+  --sunken: #ededed;
+  /* The one "accent" is simply maximum contrast against the page. */
+  --accent: var(--ink);
+  --on-accent: var(--card);
 
   --radius: 12px;
   --gap: 20px;
@@ -25,15 +27,14 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141413;
-    --card: #1e1e1c;
-    --ink: #edede8;
-    --muted: #7a7a74;
-    --rule: #2c2c29;
-    --sunken: #1a1a18;
-  }
+:root[data-theme='dark'] {
+  --bg: #0d0d0d;
+  --card: #1a1a1a;
+  --ink: #f2f2f2;
+  --muted: #8c8c8c;
+  --rule: #2a2a2a;
+  --sunken: #151515;
+  --on-accent: #0d0d0d;
 }
 
 * {
@@ -55,7 +56,6 @@ body {
   font-size: 17px;
   line-height: 1.5;
   overscroll-behavior: none;
-  /* The deck owns the gestures; the page itself never scrolls. */
   overflow: hidden;
 }
 
@@ -79,15 +79,15 @@ button {
 
 .header {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
   padding: 14px var(--gap) 10px;
   flex: none;
 }
 
 .header h1 {
   font-size: 19px;
-  font-weight: 550;
+  font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0;
 }
@@ -96,12 +96,10 @@ button {
   flex: 1;
 }
 
-/* Lane position, as dots. The minimum signal that answers "where am I". */
 .lane-dots {
   display: flex;
   gap: 6px;
   align-items: center;
-  align-self: center;
 }
 
 .lane-dots i {
@@ -116,32 +114,42 @@ button {
   background: var(--ink);
 }
 
-/* Sync state, as one dot. Filled = clean. Hollow + count = pending. */
+/* Half-filled circle: the least literal way to say "light or dark". */
+.theme-toggle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+  background: linear-gradient(to right, var(--ink) 0 50%, transparent 50% 100%);
+  flex: none;
+}
+
+/* Sync state, by shape: filled = clean, ring = pending, ring + ! = error. */
 .sync {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
-  align-self: center;
+  flex: none;
 }
 
 .sync b {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--ink);
 }
 
-.sync.pending b {
+.sync.pending b,
+.sync.offline b {
   background: none;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--ink);
 }
 
 .sync.offline b {
-  background: none;
-  border: 1.5px solid var(--muted);
+  border-color: var(--muted);
 }
 
 /* ------------------------------------------------------------------- deck */
@@ -150,7 +158,7 @@ button {
   flex: 1;
   position: relative;
   overflow: hidden;
-  touch-action: pan-y;
+  touch-action: none;
 }
 
 .deck-track {
@@ -168,7 +176,6 @@ button {
   min-width: 0;
 }
 
-/* The stack: front card full size, the two behind it peeking by a few px. */
 .stack {
   position: relative;
   flex: 1;
@@ -182,22 +189,15 @@ button {
   background: var(--card);
   border: var(--hairline) solid var(--rule);
   border-radius: var(--radius);
-  transition:
-    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 220ms ease;
 }
 
-/*
- * The cards behind peek above the front card, inset from both sides. Scaling
- * about the centre would push their top edge *below* the front card's and hide
- * them entirely — the stack has to be visible, it is the whole interface.
- */
+/* The two behind peek above the front card, inset from the sides. */
 .stack-card.behind-2 {
   top: 0;
   left: 16px;
   right: 16px;
   height: 40px;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .stack-card.behind-1 {
@@ -211,12 +211,24 @@ button {
 .stack-card.front {
   top: 16px;
   height: calc(100% - 16px);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   text-align: left;
   width: 100%;
+  will-change: transform;
+}
+
+/* Fresh card after a vertical step — a short rise, not a bounce. */
+.stack-card.front.stepped {
+  animation: card-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes card-in {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
 }
 
 .card-body {
@@ -235,9 +247,10 @@ button {
 }
 
 .card-title {
-  font-size: 17px;
-  font-weight: 550;
+  font-size: 18px;
+  font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.3;
   margin: 0;
   flex: none;
 }
@@ -245,21 +258,24 @@ button {
 .card-preview {
   font-size: 15px;
   color: var(--ink);
-  opacity: 0.78;
+  opacity: 0.75;
   overflow: hidden;
   flex: 1;
-  /* Fades out rather than clipping mid-glyph. */
   mask-image: linear-gradient(to bottom, #000 70%, transparent);
   -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
 }
 
 .card-flag {
   font-size: 12px;
-  color: var(--accent);
+  color: var(--muted);
   flex: none;
 }
 
-/* Empty lane, and the "swipe up for all" affordance. */
+.card-flag.bad {
+  color: var(--ink);
+  font-weight: 550;
+}
+
 .empty {
   display: flex;
   flex-direction: column;
@@ -278,9 +294,7 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 0 calc(14px + var(--safe-bottom));
-  /* Fixed height so the deck doesn't resize when swiping onto a read-only
-   * lane, where there is no + button. */
+  padding: 14px var(--gap) calc(14px + var(--safe-bottom));
   min-height: calc(84px + var(--safe-bottom));
 }
 
@@ -288,6 +302,14 @@ button {
   font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.count b {
+  display: block;
+  font-weight: 400;
+  color: var(--ink);
 }
 
 .fab {
@@ -296,7 +318,7 @@ button {
   height: 56px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 28px;
@@ -308,11 +330,6 @@ button {
 
 .fab:active {
   transform: scale(0.93);
-}
-
-.fab[disabled] {
-  background: var(--rule);
-  color: var(--muted);
 }
 
 /* ----------------------------------------------------------------- sheets */
@@ -336,10 +353,10 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet {
+  .sheet,
+  .stack-card.front.stepped {
     animation: none;
   }
-  .stack-card,
   .deck-track {
     transition: none;
   }
@@ -356,12 +373,13 @@ button {
 
 .sheet-bar .title {
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 600;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
 }
 
 .link-button {
@@ -371,8 +389,8 @@ button {
 }
 
 .link-button.strong {
-  color: var(--accent);
-  font-weight: 550;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .link-button[disabled] {
@@ -396,6 +414,26 @@ button {
   min-height: 0;
 }
 
+.editor .title-input {
+  border: none;
+  border-bottom: var(--hairline) solid var(--rule);
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 16px var(--gap);
+  flex: none;
+  width: 100%;
+}
+
+.editor .title-input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .editor textarea {
   flex: 1;
   width: 100%;
@@ -406,8 +444,8 @@ button {
   color: var(--ink);
   font: inherit;
   line-height: 1.55;
-  padding: var(--gap);
-  min-height: 40vh;
+  padding: 14px var(--gap);
+  min-height: 30vh;
 }
 
 .editor textarea::placeholder {
@@ -445,7 +483,7 @@ button {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: rgb(0 0 0 / 62%);
+  background: rgb(0 0 0 / 65%);
   color: #fff;
   font-size: 13px;
   line-height: 1;
@@ -483,7 +521,6 @@ button {
   text-align: right;
 }
 
-/* Wikilink autocomplete, docked above the keyboard. */
 .suggest {
   position: absolute;
   left: 0;
@@ -601,22 +638,23 @@ button {
 }
 
 .banner.bad {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--ink);
+  border-width: 1.5px;
+  color: var(--ink);
 }
 
 .primary-button {
   width: 100%;
   padding: 14px;
   border-radius: 10px;
-  background: var(--ink);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--on-accent);
   font-size: 16px;
-  font-weight: 550;
+  font-weight: 600;
 }
 
 .primary-button[disabled] {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .section-title {

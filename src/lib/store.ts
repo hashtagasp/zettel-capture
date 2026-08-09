@@ -19,6 +19,12 @@ export interface Draft {
   laneId: string
   /** For `quelle-append`: the existing `30_Quellen/Q ….md` being appended to. */
   targetPath?: string
+  /**
+   * The note's title. Becomes the `<Stichwort>` in the filename and the `# `
+   * heading. Empty falls back to the first line of the body, so a note captured
+   * in a hurry still gets a sensible name.
+   */
+  title?: string
   /** Display name of the append target, for the editor header. */
   targetLabel?: string
   /**

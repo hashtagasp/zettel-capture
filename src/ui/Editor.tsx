@@ -26,10 +26,12 @@ const SAVE_DEBOUNCE = 300
 
 export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [busy, setBusy] = useState(false)
   const textarea = useRef<HTMLTextAreaElement>(null)
+  const titleInput = useRef<HTMLInputElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const saveTimer = useRef<number>()
 
@@ -51,10 +53,18 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
       const loaded = await getDraft(draftId)
       if (!loaded || !alive) return
       setDraft(loaded)
+      setTitle(loaded.title ?? '')
       setBody(loaded.body)
       setAttachments(await getAttachments(loaded.attachmentIds))
       // Focus after paint so Android raises the keyboard on the first frame.
-      requestAnimationFrame(() => textarea.current?.focus())
+      // A new note starts in the title; an existing one in the body, so
+      // reopening to add a thought doesn't put the cursor in the wrong place.
+      requestAnimationFrame(() =>
+        (loaded.body || loaded.kind === 'quelle-append'
+          ? textarea.current
+          : titleInput.current
+        )?.focus(),
+      )
       if (openCamera) requestAnimationFrame(() => fileInput.current?.click())
     })()
     return () => {
@@ -80,6 +90,12 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
     persist({ body: value })
   }
 
+  const onTitleInput = (event: Event) => {
+    const value = (event.target as HTMLInputElement).value
+    setTitle(value)
+    persist({ title: value })
+  }
+
   const addPhoto = async (event: Event) => {
     const input = event.target as HTMLInputElement
     const files = Array.from(input.files ?? [])
@@ -94,7 +110,10 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
         const attachment: Attachment = {
           id: newId(),
           blob,
-          filename: attachmentFilename(new Date(), body || draft.targetLabel || 'Foto'),
+          filename: attachmentFilename(
+            new Date(),
+            title || draft.targetLabel || body || 'Foto',
+          ),
           contentType,
           createdAt: Date.now(),
         }
@@ -120,7 +139,8 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
     if (!draft) return onClose()
 
     const trimmed = body.trim()
-    if (!trimmed && attachments.length === 0) {
+    const trimmedTitle = title.trim()
+    if (!trimmed && !trimmedTitle && attachments.length === 0) {
       // Nothing was written. Don't leave an empty note behind.
       await deleteDraft(draft.id)
       onSaved()
@@ -129,6 +149,7 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
 
     await putDraft({
       ...draft,
+      title: trimmedTitle,
       body: trimmed,
       attachmentIds: attachments.map((a) => a.id),
       syncState: 'queued',
@@ -178,6 +199,27 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
       </div>
 
       <div class="editor">
+        {/* Quotes have no title of their own — they belong to their source. */}
+        {!isQuote && (
+          <input
+            ref={titleInput}
+            class="title-input"
+            value={title}
+            onInput={onTitleInput}
+            placeholder="Titel"
+            enterkeyhint="next"
+            autocapitalize="sentences"
+            autocomplete="off"
+            spellcheck
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                textarea.current?.focus()
+              }
+            }}
+          />
+        )}
+
         <textarea
           ref={textarea}
           value={body}
@@ -188,6 +230,7 @@ export function Editor({ draftId, openCamera, onClose, onSaved }: EditorProps) {
               ? 'Zitat im Wortlaut. Seitenzahl am Schreibtisch nachtragen.'
               : 'Was ist der Gedanke?'
           }
+          rows={6}
           autocapitalize="sentences"
           spellcheck
         />

@@ -11,6 +11,7 @@ import {
   type Draft,
 } from '../lib/store'
 import { refreshFolder } from '../lib/sync'
+import { applyTheme, loadTheme, type Theme } from '../lib/theme'
 import { useAsync, useOnline, useSyncPump } from '../lib/hooks'
 import { Deck } from './Deck'
 import { Editor } from './Editor'
@@ -33,9 +34,19 @@ export function App() {
   const [config, setConfig] = useState<GitHubConfig | null>(null)
   const [ready, setReady] = useState(false)
   const [laneIndex, setLaneIndex] = useState(0)
+  const [cardIndex, setCardIndex] = useState<number[]>(() => LANES.map(() => 0))
   const [sheet, setSheet] = useState<Sheet>(null)
   const [nonce, setNonce] = useState(0)
+  const [theme, setTheme] = useState<Theme>(loadTheme)
   const online = useOnline()
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => {
+      const next: Theme = current === 'dark' ? 'light' : 'dark'
+      applyTheme(next)
+      return next
+    })
+  }, [])
 
   const refresh = useCallback(() => setNonce((n) => n + 1), [])
 
@@ -75,6 +86,20 @@ export function App() {
   )
 
   const unsynced = useMemo(() => drafts.filter((d) => d.syncState !== 'synced').length, [drafts])
+
+  const stepCard = useCallback((lane: number, position: number) => {
+    setCardIndex((current) => current.map((v, i) => (i === lane ? position : v)))
+  }, [])
+
+  // A lane that gained or lost cards must not leave the position past the end;
+  // pushing a note shortens the draft list under you.
+  useEffect(() => {
+    setCardIndex((current) =>
+      current.map((position, lane) =>
+        Math.min(position, Math.max(0, (cardsByLane[lane]?.length ?? 1) - 1)),
+      ),
+    )
+  }, [cardsByLane])
 
   // Pull the visible lane's listing when it goes stale, never on a timer.
   useEffect(() => {
@@ -199,6 +224,11 @@ export function App() {
           ))}
         </div>
         <button
+          class="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Helles Design' : 'Dunkles Design'}
+        />
+        <button
           class={`sync ${!online ? 'offline' : unsynced > 0 ? 'pending' : ''}`}
           onClick={() => setSheet({ kind: 'settings' })}
           aria-label="Verbindung"
@@ -212,19 +242,27 @@ export function App() {
         index={laneIndex}
         onIndexChange={setLaneIndex}
         cardsByLane={cardsByLane}
+        cardIndex={cardIndex}
+        onCardIndexChange={stepCard}
         onOpenCard={openCard}
-        onOpenList={(index) => setSheet({ kind: 'list', laneIndex: index })}
         loading={draftsLoading}
       />
 
-      <div class="deck-foot" style="padding-left:20px;padding-right:20px">
-        <span class="count">
-          {!config
-            ? 'nicht verbunden — bleibt auf dem Gerät'
-            : laneCards.length > 0
-              ? `${laneCards.length} in ${lane.folder}`
-              : lane.folder}
-        </span>
+      <div class="deck-foot">
+        <button class="count" onClick={() => setSheet({ kind: 'list', laneIndex })}>
+          {!config ? (
+            'nicht verbunden — bleibt auf dem Gerät'
+          ) : laneCards.length > 0 ? (
+            <>
+              <b>
+                {Math.min((cardIndex[laneIndex] ?? 0) + 1, laneCards.length)} / {laneCards.length}
+              </b>
+              {lane.folder} · alle zeigen
+            </>
+          ) : (
+            lane.folder
+          )}
+        </button>
         {lane.mode !== 'read' && (
           <button class="fab" onClick={onFab} aria-label="Neue Notiz">
             +
