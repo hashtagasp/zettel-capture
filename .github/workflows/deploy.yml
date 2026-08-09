@@ -10,10 +10,12 @@ permissions:
   pages: write
   id-token: write
 
-# Never let two deploys race; the newer one always wins.
+# Queue deploys instead of cancelling them. `cancel-in-progress: true` suits a
+# build, where a stale run is waste — but here it discards a deploy that was
+# about to go live, and the push that triggered it then appears to do nothing.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
